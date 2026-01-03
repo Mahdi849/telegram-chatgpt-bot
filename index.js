@@ -2,11 +2,10 @@ require('dotenv').config();
 const conversations = new Map();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 conversations.get(chatId)
-conversations.set(chatId, ...)
+conversations.set(chatId,)
 conversations.delete(chatId)
 
 
