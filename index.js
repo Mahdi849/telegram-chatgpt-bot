@@ -5,9 +5,7 @@ const axios = require('axios');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-conversations.get(chatId)
-conversations.set(chatId,)
-conversations.delete(chatId)
+
 
 
 // اسم فیک مدل (نمایشی 😁)
@@ -21,7 +19,7 @@ function menuMarkup() {
 	    
         [{ text: '🤖 مدل فعلی', callback_data: 'current_model' }],
         [{ text: 'ℹ️ درباره ChatGPT', callback_data: 'about' }]
-		[{ text: '🗑 پاک کردن گفتگو', callback_data: 'clear_chat' }]
+	
       ]
     }
   };
@@ -39,7 +37,7 @@ bot.start((ctx) => {
 bot.on('text', async (ctx) => {
 	await ctx.sendChatAction('typing'); // ⬅️ پیام در حال تایپ
 
-  const chatId = ctx.chat.id;
+  
   const userMessage = ctx.message.text;
 
   if (!conversations.has(chatId)) {
@@ -55,7 +53,7 @@ bot.on('text', async (ctx) => {
     ]);
   }
 
-  const history = conversations.get(chatId);
+  
 
   history.push({ role: 'user', content: userMessage });
 
@@ -112,11 +110,7 @@ bot.action('about', (ctx) => {
   );
 });
 
-bot.action('clear_chat', (ctx) => {
-  conversations.delete(ctx.chat.id);
-  ctx.answerCbQuery();
-  ctx.reply('🗑 حافظه این چت پاک شد');
-});
+
 
 
 /* ---------- اجرا ---------- */
