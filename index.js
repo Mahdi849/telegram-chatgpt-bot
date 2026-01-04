@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
+const nlp = require('compromise'); // npm install compromise
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -30,6 +31,19 @@ bot.start((ctx) => {
     menuMarkup()
   );
 });
+
+/* ---------- تابع بولد هوشمند ---------- */
+function boldProperNouns(text) {
+  let doc = nlp(text);
+  const properNouns = doc.nouns().isProper().out('array');
+
+  properNouns.forEach(word => {
+    const regex = new RegExp(`\\b${word}\\b`, 'g');
+    text = text.replace(regex, `<b>${word}</b>`);
+  });
+
+  return text;
+}
 
 /* ---------- دریافت پیام ---------- */
 bot.on('text', async (ctx) => {
@@ -65,15 +79,21 @@ bot.on('text', async (ctx) => {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        timeout: 30000 // جلوگیری از هنگ روی سرور
+        timeout: 30000
       }
     );
 
-    const reply = res.data.choices[0].message.content;
+    let reply = res.data.choices[0].message.content;
+
+    // بولد کردن خودکار اسم برنامه‌ها / اسامی مهم
+    reply = boldProperNouns(reply);
 
     history.push({ role: 'assistant', content: reply });
 
-    await ctx.reply(`🤖 GPT-4:\n\n${reply}`, menuMarkup());
+    await ctx.reply(`🤖 GPT-4:\n\n${reply}`, {
+      parse_mode: 'HTML',
+      ...menuMarkup()
+    });
 
     // کنترل حجم حافظه
     if (history.length > 20) {
@@ -82,7 +102,7 @@ bot.on('text', async (ctx) => {
 
   } catch (err) {
     console.error('AI ERROR:', err.response?.data || err.message);
-    ctx.reply('❌ خطا در ارتباط با هوش مصنوع');
+    ctx.reply('❌ خطا در ارتباط با هوش مصنوعی');
   }
 });
 
