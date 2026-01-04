@@ -1,14 +1,13 @@
 require('dotenv').config();
-const conversations = new Map();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// حافظه جدا برای هر چت
+const conversations = new Map();
 
-
-
-// اسم فیک مدل (نمایشی 😁)
+// اسم نمایشی مدل 😁
 const FAKE_MODEL_NAME = 'GPT-4';
 
 /* ---------- منوی اصلی ---------- */
@@ -16,10 +15,9 @@ function menuMarkup() {
   return {
     reply_markup: {
       inline_keyboard: [
-	    
         [{ text: '🤖 مدل فعلی', callback_data: 'current_model' }],
-        [{ text: 'ℹ️ درباره ChatGPT', callback_data: 'about' }]
-	
+        [{ text: 'ℹ️ درباره ربات', callback_data: 'about' }],
+        [{ text: '🗑 پاک کردن گفتگو', callback_data: 'clear_chat' }]
       ]
     }
   };
@@ -28,38 +26,34 @@ function menuMarkup() {
 /* ---------- start ---------- */
 bot.start((ctx) => {
   ctx.reply(
-    'سلام 👋\nمن ChatGPT هستم (GPT-4)\nهر چی بپرسی جواب می‌دم 🤖✨',
+    'سلام 👋\nمن ChatGPT هستم 🤖\nهر چی بپرسی جواب می‌دم ✨',
     menuMarkup()
   );
 });
 
 /* ---------- دریافت پیام ---------- */
 bot.on('text', async (ctx) => {
-	await ctx.sendChatAction('typing'); // ⬅️ پیام در حال تایپ
-
-  
+  const chatId = ctx.chat.id;
   const userMessage = ctx.message.text;
 
+  // تایپینگ
+  await ctx.sendChatAction('typing');
+
+  // ساخت حافظه اگر نبود
   if (!conversations.has(chatId)) {
     conversations.set(chatId, [
       {
         role: 'system',
-        content: `
-تو یک هوش مصنوعی فارسی‌زبان هستی.
-حافظه این گفتگو فقط مخصوص همین چت است.
-پاسخ‌ها را دقیق، روان و فارسی بده.
-`
+        content:
+          'تو یک هوش مصنوعی فارسی‌زبان هستی. پاسخ‌ها دقیق، روان و فارسی باشند.'
       }
     ]);
   }
 
-  
-
+  const history = conversations.get(chatId);
   history.push({ role: 'user', content: userMessage });
 
   try {
-    await ctx.sendChatAction('typing');
-
     const res = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -70,7 +64,8 @@ bot.on('text', async (ctx) => {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 30000 // جلوگیری از هنگ روی سرور
       }
     );
 
@@ -78,19 +73,18 @@ bot.on('text', async (ctx) => {
 
     history.push({ role: 'assistant', content: reply });
 
-    ctx.reply(`🤖 GPT-4:\n\n${reply}`);
+    await ctx.reply(`🤖 GPT-4:\n\n${reply}`, menuMarkup());
 
-    if (history.length > 30) {
+    // کنترل حجم حافظه
+    if (history.length > 20) {
       history.splice(1, 4);
     }
 
   } catch (err) {
-    console.error(err.response?.data || err.message);
+    console.error('AI ERROR:', err.response?.data || err.message);
     ctx.reply('❌ خطا در ارتباط با هوش مصنوع');
   }
 });
-
-
 
 /* ---------- مدل فعلی ---------- */
 bot.action('current_model', (ctx) => {
@@ -99,20 +93,27 @@ bot.action('current_model', (ctx) => {
 });
 
 /* ---------- درباره ---------- */
-
 bot.action('about', (ctx) => {
-	
   ctx.answerCbQuery();
   ctx.reply(
-    '🤖 ChatGPT (GPT-4)\n' +
-    'هوش مصنوعی برای پاسخ‌گویی به سوالات شما\n' +
-    'نسخه سریع و هوشمند ✨'
+    '🤖 ربات ChatGPT\n' +
+    'نسخه سریع و هوشمند\n' +
+    'حافظه جدا برای هر چت ✨'
   );
 });
 
-
-
+/* ---------- پاک کردن حافظه ---------- */
+bot.action('clear_chat', (ctx) => {
+  conversations.delete(ctx.chat.id);
+  ctx.answerCbQuery();
+  ctx.reply('🗑 حافظه این چت پاک شد');
+});
 
 /* ---------- اجرا ---------- */
-bot.launch();
-console.log('🤖 ChatGPT Bot is gogogoing');
+bot.launch()
+  .then(() => console.log('🤖 Bot is running on server'))
+  .catch(err => console.error('BOT ERROR:', err));
+
+// مخصوص Render
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
