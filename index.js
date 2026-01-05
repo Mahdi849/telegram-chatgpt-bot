@@ -1,24 +1,25 @@
 require('dotenv').config();
+const conversations = new Map();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const nlp = require('compromise'); // npm install compromise
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// حافظه جدا برای هر چت
-const conversations = new Map();
 
-// اسم نمایشی مدل 😁
-const FAKE_MODEL_NAME = 'GPT-4';
+
+
+// اسم فیک مدل (نمایشی 😁)
+const FAKE_MODEL_NAME = 'GPT-5.2';
 
 /* ---------- منوی اصلی ---------- */
 function menuMarkup() {
   return {
     reply_markup: {
       inline_keyboard: [
+	    
         [{ text: '🤖 مدل فعلی', callback_data: 'current_model' }],
-        [{ text: 'ℹ️ درباره ربات', callback_data: 'about' }],
-        [{ text: '🗑 پاک کردن گفتگو', callback_data: 'clear_chat' }]
+        [{ text: 'ℹ️ درباره ChatGPT', callback_data: 'about' }]
+	
       ]
     }
   };
@@ -27,47 +28,34 @@ function menuMarkup() {
 /* ---------- start ---------- */
 bot.start((ctx) => {
   ctx.reply(
-    'سلام 👋\nمن ChatGPT هستم 🤖\nهر چی بپرسی جواب می‌دم ✨',
+    'سلام 👋\nمن ChatGPT هستم (GPT-5.2)\nهر چی بپرسی جواب می‌دم 🤖✨',
     menuMarkup()
   );
 });
 
-/* ---------- تابع بولد هوشمند ---------- */
-function boldProperNouns(text) {
-  let doc = nlp(text);
-  const properNouns = doc.nouns().isProper().out('array');
-
-  properNouns.forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'g');
-    text = text.replace(regex, `<b>${word}</b>`);
-  });
-
-  return text;
-}
-
 /* ---------- دریافت پیام ---------- */
 bot.on('text', async (ctx) => {
-  const chatId = ctx.chat.id;
+	await ctx.sendChatAction('typing'); // ⬅️ پیام در حال تایپ
+
+  
   const userMessage = ctx.message.text;
 
-  // تایپینگ
-  await ctx.sendChatAction('typing');
-
-  // ساخت حافظه اگر نبود
   if (!conversations.has(chatId)) {
     conversations.set(chatId, [
       {
         role: 'system',
-        content:
-          'تو یک هوش مصنوعی فارسی‌زبان هستی. پاسخ‌ها دقیق، روان و فارسی باشند.'
+        content: ' و اتو یک هوش مصنوعی هستی که دقیق چت میکند و شوخ تبعی نمیکند پاسخ را روان و دقیق بده و کلمه های مهم را مثل نام برنامه و... را برای تلگرام بلد کن و اگر از مدلت پرسید بگو من مدل chatgpt 5.2 هستم'
       }
     ]);
   }
 
-  const history = conversations.get(chatId);
+  
+
   history.push({ role: 'user', content: userMessage });
 
   try {
+    await ctx.sendChatAction('typing');
+
     const res = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -78,33 +66,27 @@ bot.on('text', async (ctx) => {
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json'
-        },
-        timeout: 30000
+        }
       }
     );
 
-    let reply = res.data.choices[0].message.content;
-
-    // بولد کردن خودکار اسم برنامه‌ها / اسامی مهم
-    reply = boldProperNouns(reply);
+    const reply = res.data.choices[0].message.content;
 
     history.push({ role: 'assistant', content: reply });
 
-    await ctx.reply(`🤖 GPT-4:\n\n${reply}`, {
-      parse_mode: 'HTML',
-      ...menuMarkup()
-    });
+    ctx.reply(`🤖 GPT-5.2:\n\n${reply}`);
 
-    // کنترل حجم حافظه
-    if (history.length > 20) {
+    if (history.length > 30) {
       history.splice(1, 4);
     }
 
   } catch (err) {
-    console.error('AI ERROR:', err.response?.data || err.message);
-    ctx.reply('❌ خطا در ارتباط با هوش مصنوعی');
+    console.error(err.response?.data || err.message);
+    ctx.reply('❌ خطا در ارتباط با هوش مصنوع');
   }
 });
+
+
 
 /* ---------- مدل فعلی ---------- */
 bot.action('current_model', (ctx) => {
@@ -113,27 +95,20 @@ bot.action('current_model', (ctx) => {
 });
 
 /* ---------- درباره ---------- */
+
 bot.action('about', (ctx) => {
+	
   ctx.answerCbQuery();
   ctx.reply(
-    '🤖 ربات ChatGPT\n' +
-    'نسخه سریع و هوشمند\n' +
-    'حافظه جدا برای هر چت ✨'
+    '🤖 ChatGPT (GPT-4)\n' +
+    'هوش مصنوعی برای پاسخ‌گویی به سوالات شما\n' +
+    'نسخه سریع و هوشمند ✨'
   );
 });
 
-/* ---------- پاک کردن حافظه ---------- */
-bot.action('clear_chat', (ctx) => {
-  conversations.delete(ctx.chat.id);
-  ctx.answerCbQuery();
-  ctx.reply('🗑 حافظه این چت پاک شد');
-});
+
+
 
 /* ---------- اجرا ---------- */
-bot.launch()
-  .then(() => console.log('🤖 Bot is running on server'))
-  .catch(err => console.error('BOT ERROR:', err));
-
-// مخصوص Render
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+bot.launch();
+console.log('🤖 ChatGPT Bot is running');
