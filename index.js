@@ -1,25 +1,55 @@
 require('dotenv').config();
-const conversations = new Map();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
+const nlp = require('compromise');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// حافظه جدا برای هر چت
+const conversations = new Map();
 
-
-
-// اسم فیک مدل (نمایشی 😁)
+// اسم نمایشی
 const FAKE_MODEL_NAME = 'GPT-5.2';
 
-/* ---------- منوی اصلی ---------- */
-function menuMarkup() {
+/* ---------- Escape HTML ---------- */
+function escapeHTML(text) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/* ---------- بولد هوشمند اسم برنامه‌ها ---------- */
+function boldDetectedApps(text) {
+  const doc = nlp(text);
+  const names = doc.nouns().isProper().out('array');
+
+  names.forEach(name => {
+    const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`\\b${safe}\\b`, 'g');
+    text = text.replace(regex, `<b>${name}</b>`);
+  });
+
+  return text;
+}
+
+/* ---------- کیبورد پایین (فقط منو) ---------- */
+function bottomMenu() {
+  return {
+    reply_markup: {
+      keyboard: [[{ text: '☰ منو' }]],
+      resize_keyboard: true
+    }
+  };
+}
+
+/* ---------- منوی روی پیام ---------- */
+function inlineMenu() {
   return {
     reply_markup: {
       inline_keyboard: [
-	    
         [{ text: '🤖 مدل فعلی', callback_data: 'current_model' }],
-        [{ text: 'ℹ️ درباره ChatGPT', callback_data: 'about' }]
-	
+        [{ text: 'ℹ️ درباره', callback_data: 'about' }]
       ]
     }
   };
@@ -27,31 +57,40 @@ function menuMarkup() {
 
 /* ---------- start ---------- */
 bot.start((ctx) => {
+  const chatId = ctx.chat.id;
+  conversations.delete(chatId); // ریست حافظه
+
   ctx.reply(
     'سلام 👋\nمن ChatGPT هستم (GPT-5.2)\nهر چی بپرسی جواب می‌دم 🤖✨',
-    menuMarkup()
+    bottomMenu()
   );
 });
 
 /* ---------- دریافت پیام ---------- */
 bot.on('text', async (ctx) => {
-	await ctx.sendChatAction('typing'); // ⬅️ پیام در حال تایپ
+  const chatId = ctx.chat.id;   // ✅ خیلی مهم
+  const text = ctx.message.text;
 
-  
-  const userMessage = ctx.message.text;
+  // منو
+  if (text === '☰ منو') {
+    return ctx.reply('📋 منوی اصلی', inlineMenu());
+  }
 
+  // حافظه چت
   if (!conversations.has(chatId)) {
     conversations.set(chatId, [
       {
         role: 'system',
-        content: ' و اتو یک هوش مصنوعی هستی که دقیق چت میکند و شوخ تبعی نمیکند پاسخ را روان و دقیق بده و کلمه های مهم را مثل نام برنامه و... را برای تلگرام بلد کن و اگر از مدلت پرسید بگو من مدل chatgpt 5.2 هستم'
+        content:
+          'تو یک هوش مصنوعی دقیق هستی. پاسخ‌ها روان باشند. ' +
+          'نام برنامه‌ها و موارد مهم را بولد کن. ' +
+          'اگر از مدلت پرسیدند بگو ChatGPT 5.2.'
       }
     ]);
   }
 
-  
-
-  history.push({ role: 'user', content: userMessage });
+  const history = conversations.get(chatId);
+  history.push({ role: 'user', content: text });
 
   try {
     await ctx.sendChatAction('typing');
@@ -70,12 +109,18 @@ bot.on('text', async (ctx) => {
       }
     );
 
-    const reply = res.data.choices[0].message.content;
+    let reply = res.data.choices[0].message.content;
+
+    reply = escapeHTML(reply);
+    reply = boldDetectedApps(reply);
 
     history.push({ role: 'assistant', content: reply });
 
-    ctx.reply(`🤖 GPT-5.2:\n\n${reply}`);
+    ctx.reply(`🤖 <b>GPT-5.2</b>\n\n${reply}`, {
+      parse_mode: 'HTML'
+    });
 
+    // محدود کردن حافظه
     if (history.length > 30) {
       history.splice(1, 4);
     }
@@ -86,28 +131,25 @@ bot.on('text', async (ctx) => {
   }
 });
 
-
-
-/* ---------- مدل فعلی ---------- */
+/* ---------- دکمه‌های منو ---------- */
 bot.action('current_model', (ctx) => {
   ctx.answerCbQuery();
-  ctx.reply(`🤖 مدل فعال: ${FAKE_MODEL_NAME}`);
+  ctx.editMessageText(`🤖 مدل فعال: <b>${FAKE_MODEL_NAME}</b>`, {
+    parse_mode: 'HTML'
+  });
 });
 
-/* ---------- درباره ---------- */
-
 bot.action('about', (ctx) => {
-	
   ctx.answerCbQuery();
-  ctx.reply(
-    '🤖 ChatGPT (GPT-4)\n' +
-    'هوش مصنوعی برای پاسخ‌گویی به سوالات شما\n' +
-    'نسخه سریع و هوشمند ✨'
+  ctx.editMessageText(
+    '🤖 ChatGPT\nهوش مصنوعی پاسخ‌گو\nنسخه سریع و هوشمند ✨'
   );
 });
 
-
-
+/* ---------- جلوگیری از کرش ---------- */
+bot.catch((err) => {
+  console.error('Bot error:', err);
+});
 
 /* ---------- اجرا ---------- */
 bot.launch();
