@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const axios = require('axios');
-const nlp = require('compromise');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -17,20 +16,6 @@ function escapeHTML(text) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
-}
-
-/* ---------- بولد هوشمند اسم برنامه‌ها ---------- */
-function boldDetectedApps(text) {
-  const doc = nlp(text);
-  const names = doc.nouns().isProper().out('array');
-
-  names.forEach(name => {
-    const safe = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`\\b${safe}\\b`, 'g');
-    text = text.replace(regex, `<b>${name}</b>`);
-  });
-
-  return text;
 }
 
 /* ---------- کیبورد پایین (فقط منو) ---------- */
@@ -68,7 +53,7 @@ bot.start((ctx) => {
 
 /* ---------- دریافت پیام ---------- */
 bot.on('text', async (ctx) => {
-  const chatId = ctx.chat.id;   // ✅ خیلی مهم
+  const chatId = ctx.chat.id;
   const text = ctx.message.text;
 
   // منو
@@ -83,7 +68,6 @@ bot.on('text', async (ctx) => {
         role: 'system',
         content:
           'تو یک هوش مصنوعی دقیق هستی. پاسخ‌ها روان باشند. ' +
-          'نام برنامه‌ها و موارد مهم را بولد کن. ' +
           'اگر از مدلت پرسیدند بگو ChatGPT 5.2.'
       }
     ]);
@@ -110,9 +94,7 @@ bot.on('text', async (ctx) => {
     );
 
     let reply = res.data.choices[0].message.content;
-
     reply = escapeHTML(reply);
-    reply = boldDetectedApps(reply);
 
     history.push({ role: 'assistant', content: reply });
 
